@@ -24,6 +24,7 @@ use PHPUnit\Framework\TestCase;
 final class CloudflareDriverTest extends TestCase
 {
     private const TOKEN = 'secret-token-123';
+    private const ACCOUNT = '0123456789abcdef0123456789abcdef';
 
     private array $history = [];
     /** @var list<float> */
@@ -36,7 +37,7 @@ final class CloudflareDriverTest extends TestCase
         $stack->push(Middleware::history($this->history));
 
         return new CloudflareDriver(
-            accountId: 'acc',
+            accountId: self::ACCOUNT,
             apiToken: $token,
             timeout: $timeout,
             retry: new RetryPolicy(maxRetries: $retries, jitter: 0.0),
@@ -86,7 +87,7 @@ final class CloudflareDriverTest extends TestCase
         /** @var Request $request */
         $request = $this->history[0]['request'];
         $this->assertSame('POST', $request->getMethod());
-        $this->assertSame('https://api.cloudflare.com/client/v4/accounts/acc/ai/run', (string) $request->getUri());
+        $this->assertSame('https://api.cloudflare.com/client/v4/accounts/' . self::ACCOUNT . '/ai/run', (string) $request->getUri());
         $this->assertSame('Bearer ' . self::TOKEN, $request->getHeaderLine('Authorization'));
         $this->assertFalse($request->hasHeader('cf-aig-gateway-id'));
 
@@ -108,9 +109,9 @@ final class CloudflareDriverTest extends TestCase
 
     public function test_gateway_header_when_configured(): void
     {
-        $this->driver([self::fixture('cloudflare-ok')], gateway: 'parser')->evaluate('x', self::questions());
+        $this->driver([self::fixture('cloudflare-ok')], gateway: 'my-app')->evaluate('x', self::questions());
 
-        $this->assertSame('parser', $this->history[0]['request']->getHeaderLine('cf-aig-gateway-id'));
+        $this->assertSame('my-app', $this->history[0]['request']->getHeaderLine('cf-aig-gateway-id'));
     }
 
     public function test_parses_real_cloudflare_response(): void
@@ -270,6 +271,19 @@ final class CloudflareDriverTest extends TestCase
             $this->fail('expected unavailable');
         } catch (JevUnavailableException $e) {
             $this->assertNull($e->getPrevious());
+        }
+    }
+
+    public function test_account_id_never_leaks_into_exceptions(): void
+    {
+        try {
+            $this->driver([
+                new ConnectException('cURL error 28 for https://api.cloudflare.com/client/v4/accounts/' . self::ACCOUNT . '/ai/run', new Request('POST', '/')),
+            ], retries: 0)->evaluate('x', self::questions());
+            $this->fail('expected unavailable');
+        } catch (JevUnavailableException $e) {
+            $this->assertStringNotContainsString(self::ACCOUNT, $e->getMessage());
+            $this->assertStringContainsString('[account]', $e->getMessage());
         }
     }
 

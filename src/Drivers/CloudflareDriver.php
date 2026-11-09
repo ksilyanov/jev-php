@@ -188,7 +188,7 @@ final class CloudflareDriver implements Jev
 
     private function scrub(string $text): string
     {
-        return str_replace($this->apiToken, '[token]', $text);
+        return str_replace([$this->apiToken, $this->accountId], ['[token]', '[account]'], $text);
     }
 
     private static function describe(array $errors, string $raw): string

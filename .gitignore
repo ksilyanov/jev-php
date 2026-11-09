@@ -2,4 +2,4 @@
 /vendor/
 composer.lock
 .phpunit.cache/
-/docs/
+/docs/internal/

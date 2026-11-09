@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Unit tests on PHP 8.2 with the lowest allowed dependencies (Laravel 11), in Docker, on a copy of the repo.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+docker run --rm -v "$PWD":/src:ro php:8.2-cli bash -c '
+  set -e
+  apt-get -qq update >/dev/null && apt-get -qq install -y git unzip >/dev/null
+  curl -sS https://getcomposer.org/installer | php -- --quiet --install-dir=/usr/local/bin --filename=composer
+  cp -r /src /w && cd /w && rm -rf vendor composer.lock .env
+  composer update --prefer-lowest --no-interaction -q
+  php -v | head -1
+  vendor/bin/phpunit
+'
