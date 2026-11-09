@@ -239,6 +239,40 @@ final class CloudflareDriverTest extends TestCase
         }
     }
 
+    public function test_unreadable_answer_keeps_request_context(): void
+    {
+        try {
+            $this->driver([self::json(200, ['answers' => ['a' => ['type' => 'weird']]], ['cf-ray' => 'ray-7'])])->evaluate('x', self::questions());
+            $this->fail('expected invalid response');
+        } catch (JevInvalidResponseException $e) {
+            $this->assertSame('ray-7', $e->requestId);
+            $this->assertSame('cloudflare', $e->driver);
+            $this->assertStringContainsString('weird', (string) $e->body);
+        }
+    }
+
+    public function test_structured_legend_is_kept_as_sent(): void
+    {
+        $answer = ['type' => 'score', 'score' => 1.0, 'legend' => ['0' => ['label' => 'low'], '1' => 'high'], 'probabilities' => ['0' => 0.5, '1' => 0.5]];
+        $response = $this->driver([self::json(200, ['answers' => ['s' => $answer]])])->evaluate('x', self::questions());
+
+        $this->assertSame(['label' => 'low'], $response->answer('s')->legend['0']);
+    }
+
+    public function test_transport_failure_does_not_chain_the_request(): void
+    {
+        try {
+            $this->driver([
+                new ConnectException('down', new Request('POST', '/', ['Authorization' => 'Bearer ' . self::TOKEN])),
+                new ConnectException('down', new Request('POST', '/')),
+                new ConnectException('down', new Request('POST', '/')),
+            ])->evaluate('x', self::questions());
+            $this->fail('expected unavailable');
+        } catch (JevUnavailableException $e) {
+            $this->assertNull($e->getPrevious());
+        }
+    }
+
     public function test_unencodable_state_is_rejected_before_any_request(): void
     {
         $this->expectException(JevRequestRejectedException::class);

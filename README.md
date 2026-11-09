@@ -97,6 +97,7 @@ $app->instance(Jev::class, $jev);
 - Pinned versions are **not** served (`typesafe/jev-1.13.0` → 404, code 7003). Only the latest model is available, so watch `$response->model` if you tuned thresholds against a version.
 - Latency, 60 sequential calls with three questions: p50 384 ms, p95 587 ms, max 753 ms, 0 failures.
 - Bad token → 401, code 10000.
+- Structured instructions and structured choice descriptions work. Structured **score levels** (objects instead of strings) fail on Cloudflare with HTTP 500, code 2002 "Failed to parse model output" — it is reported as `JevUnavailableException` and retried, so use string levels.
 
 Live check (manual, uses your credentials from env or `.env`, costs fractions of a cent): `bin/smoke [N]`.
 

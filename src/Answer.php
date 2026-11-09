@@ -11,7 +11,7 @@ final class Answer
 {
     /**
      * @param array<string, float> $probabilities choice: option => p; score: level index => p
-     * @param array<string, string> $legend score: level index => description
+     * @param array<string, string|array> $legend score: level index => description, as sent
      * @param array $raw the answer as Jev returned it
      */
     public function __construct(
@@ -55,7 +55,7 @@ final class Answer
                 score: isset($raw['score']) ? (float) $raw['score'] : throw new JevInvalidResponseException('score answer without "score"'),
                 confidence: $confidence,
                 probabilities: $probabilities,
-                legend: array_map('strval', (array) ($raw['legend'] ?? [])),
+                legend: (array) ($raw['legend'] ?? []),
                 raw: $raw,
             ),
             default => throw new JevInvalidResponseException("unknown answer type '{$type}'"),

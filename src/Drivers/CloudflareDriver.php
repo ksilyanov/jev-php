@@ -125,7 +125,8 @@ final class CloudflareDriver implements Jev
                 'http_errors' => false,
             ]);
         } catch (TransferException $e) {
-            throw new RetryableUnavailable($this->scrub('Cloudflare request failed: ' . $e->getMessage()), null, driver: self::DRIVER, previous: $e);
+            // No `previous`: Guzzle exceptions hold the request, Authorization header included.
+            throw new RetryableUnavailable($this->scrub('Cloudflare request failed: ' . $e::class . ': ' . $e->getMessage()), null, driver: self::DRIVER);
         }
 
         $status = $response->getStatusCode();
@@ -164,8 +165,12 @@ final class CloudflareDriver implements Jev
         }
 
         $answers = [];
-        foreach ($data['answers'] as $name => $answer) {
-            $answers[(string) $name] = Answer::fromWire((array) $answer);
+        try {
+            foreach ($data['answers'] as $name => $answer) {
+                $answers[(string) $name] = Answer::fromWire((array) $answer);
+            }
+        } catch (JevInvalidResponseException $e) {
+            throw new JevInvalidResponseException($e->getMessage(), 200, null, $requestId, $this->scrub(mb_substr(json_encode($raw) ?: '', 0, 2000)), self::DRIVER);
         }
 
         return new Response(
