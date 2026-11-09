@@ -1,0 +1,102 @@
+#!/usr/bin/env php
+<?php
+
+// Live check against real Jev. Manual only; costs fractions of a cent.
+// Reads JEV_CLOUDFLARE_* from the environment or ./.env. Never prints the token.
+//   bin/smoke            one call with all three question types + error checks
+//   bin/smoke 50         plus a latency batch of 50 calls
+
+declare(strict_types=1);
+
+require __DIR__ . '/../vendor/autoload.php';
+
+use Ksilyanov\Jev\Drivers\CloudflareDriver;
+use Ksilyanov\Jev\Exceptions\JevAccessException;
+use Ksilyanov\Jev\Exceptions\JevException;
+use Ksilyanov\Jev\Question;
+
+$env = static function (string $key): string {
+    $value = getenv($key);
+    if ($value !== false && $value !== '') {
+        return $value;
+    }
+    $file = __DIR__ . '/../.env';
+    if (is_file($file)) {
+        foreach (file($file, FILE_IGNORE_NEW_LINES) as $line) {
+            if (str_starts_with($line, $key . '=')) {
+                return trim(substr($line, strlen($key) + 1), " \t\"'");
+            }
+        }
+    }
+
+    return '';
+};
+
+$account = $env('JEV_CLOUDFLARE_ACCOUNT_ID');
+$token = $env('JEV_CLOUDFLARE_API_TOKEN');
+if ($account === '' || $token === '') {
+    fwrite(STDERR, "JEV_CLOUDFLARE_ACCOUNT_ID and JEV_CLOUDFLARE_API_TOKEN must be set (env or .env)\n");
+    exit(2);
+}
+
+$ok = true;
+$check = static function (string $label, bool $pass, string $detail = '') use (&$ok): void {
+    $ok = $ok && $pass;
+    printf("%s %s%s\n", $pass ? 'ok  ' : 'FAIL', $label, $detail !== '' ? " — {$detail}" : '');
+};
+
+$questions = [
+    'live' => Question::noul('Is this a live music performance?'),
+    'category' => Question::choice('Which category fits best?', ['concerts' => 'a live act or DJ headline show', 'entertainment' => 'parties, clubs, bars', '0' => null]),
+    'size' => Question::score('How big is the event?', ['small', 'medium', 'big']),
+];
+$state = ['title' => 'Top DJ headline night at Savaya', 'location' => 'Uluwatu', 'description' => 'Международный хедлайнер, open air.'];
+
+$jev = new CloudflareDriver(accountId: $account, apiToken: $token);
+try {
+    $r = $jev->evaluate($state, $questions);
+    $check('three question types answered', count($r->answers) === 3);
+    $check('exact model version reported', (bool) preg_match('/^jev-\d/', (string) $r->model), (string) $r->model);
+    $check('usage reported', $r->inputTokens !== null && $r->inputTokens > 0, "in={$r->inputTokens} out={$r->outputTokens}");
+    $check('request id', $r->requestId !== null);
+    printf("     noul=%.2f choice=%s (conf %.2f) score=%.2f latency=%dms attempts=%d\n",
+        $r->answer('live')->noul, $r->answer('category')->choice, $r->answer('category')->confidence,
+        $r->answer('size')->score, $r->latencyMs, $r->attempts);
+} catch (JevException $e) {
+    $check('call succeeded', false, $e::class . ': ' . $e->getMessage());
+}
+
+try {
+    (new CloudflareDriver(accountId: $account, apiToken: 'invalid-token'))->evaluate('x', ['q' => Question::noul('?')]);
+    $check('bad token → access error', false, 'call succeeded');
+} catch (JevException $e) {
+    $check('bad token → access error', $e instanceof JevAccessException, $e::class . " status={$e->status} code={$e->providerCode}");
+}
+
+try {
+    (new CloudflareDriver(accountId: $account, apiToken: $token, model: 'typesafe/jev-1.13.0'))->evaluate('x', ['q' => Question::noul('?')]);
+    echo "info pinned model typesafe/jev-1.13.0 is served\n";
+} catch (JevException $e) {
+    echo 'info pinned model not served: ' . $e::class . " status={$e->status} code={$e->providerCode}\n";
+}
+
+$n = (int) ($argv[1] ?? 0);
+if ($n > 0) {
+    $latencies = [];
+    $failures = [];
+    for ($i = 0; $i < $n; $i++) {
+        try {
+            $latencies[] = $jev->evaluate($state + ['n' => $i], $questions)->latencyMs;
+        } catch (JevException $e) {
+            $failures[] = $e::class . ' ' . $e->status;
+        }
+    }
+    sort($latencies);
+    $p = static fn (float $q) => $latencies === [] ? 0 : $latencies[(int) floor(($q) * (count($latencies) - 1))];
+    printf("batch n=%d ok=%d fail=%d p50=%dms p95=%dms max=%dms\n", $n, count($latencies), count($failures), $p(0.5), $p(0.95), $latencies === [] ? 0 : end($latencies));
+    foreach (array_count_values($failures) as $kind => $count) {
+        echo "     {$count} × {$kind}\n";
+    }
+}
+
+exit($ok ? 0 : 1);

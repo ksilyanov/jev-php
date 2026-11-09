@@ -1,0 +1,41 @@
+{
+    "name": "ksilyanov/jev-php",
+    "description": "PHP client for TypeSafe Jev structured evaluation model (via Cloudflare Workers AI), with Laravel integration",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "guzzlehttp/guzzle": "^7.8"
+    },
+    "require-dev": {
+        "illuminate/config": "^11.0|^12.0",
+        "illuminate/container": "^11.0|^12.0",
+        "illuminate/support": "^11.0|^12.0",
+        "phpunit/phpunit": "^11.0",
+        "vlucas/phpdotenv": "^5.6"
+    },
+    "suggest": {
+        "illuminate/support": "Laravel service provider and config/jev.php"
+    },
+    "autoload": {
+        "psr-4": {
+            "Ksilyanov\\Jev\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Ksilyanov\\Jev\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Ksilyanov\\Jev\\Laravel\\JevServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true
+    },
+    "minimum-stability": "stable"
+}
